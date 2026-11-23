@@ -1,0 +1,23 @@
+{
+  "name": "restaurant-pos",
+  "version": "1.0.0",
+  "description": "Restaurant POS & KOT system (Node.js + PostgreSQL), Railway-ready",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "license:keygen": "node tools/license/keygen.js",
+    "license:issue": "node tools/license/issue.js",
+    "demo:export": "node tools/demo/export.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.2.0",
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

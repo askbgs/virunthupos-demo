@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start · POS</title>
+<style>
+@font-face { font-family: 'Archivo'; font-weight: 400; font-display: swap; src: url('/fonts/archivo-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Archivo'; font-weight: 700; font-display: swap; src: url('/fonts/archivo-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Archivo'; font-weight: 800; font-display: swap; src: url('/fonts/archivo-latin-800-normal.woff2') format('woff2'); }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: Archivo, Arial, sans-serif; background: #f0efed; color: #1b1b1b; display: grid; place-items: center; padding: 24px; }
+main { width: 100%; max-width: 560px; background: #fff; border: 2px solid #1b1b1b; padding: 36px 32px 30px; }
+.eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6b6b6b; }
+h1 { margin: 10px 0 8px; font-size: 32px; line-height: 1.1; font-weight: 800; letter-spacing: -.02em; }
+p { margin: 0 0 6px; font-size: 17px; line-height: 1.45; }
+.muted { color: #6b6b6b; font-size: 15px; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; background: #b5b5b5; }
+.ok .dot { background: #1f8a42; } .off .dot { background: #e5321b; } .busy .dot { background: #e5a21b; animation: pulse 1s infinite alternate; }
+@keyframes pulse { to { opacity: .35; } }
+.btn { display: block; width: 100%; margin-top: 22px; padding: 18px 20px; font: 800 19px Archivo, Arial, sans-serif; text-align: center; text-decoration: none; border: 2px solid #1b1b1b; background: #1b1b1b; color: #fff; cursor: pointer; }
+.btn.red { background: #e5321b; border-color: #e5321b; }
+.btn.ghost { background: #fff; color: #1b1b1b; font-size: 16px; padding: 13px; margin-top: 10px; }
+.btn:focus-visible { outline: 3px solid #e5a21b; outline-offset: 2px; }
+.problem { margin-top: 14px; padding: 12px 14px; background: #fdece8; border-left: 4px solid #e5321b; font-size: 15px; }
+</style>
+</head>
+<body>
+<main id="box" aria-live="polite">
+  <div class="eyebrow">Point of sale</div>
+  <h1>Checking the internet…</h1>
+  <p class="muted">One moment.</p>
+</main>
+<script>
+(() => {
+  const box = document.getElementById('box');
+  const shop = location.origin + '/start';
+  let leaving = false; let stay = false; let lastData = null;
+  const ago = (t) => { if (!t) return 'never'; const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
+    return s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`; };
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const toCloud = (d) => `${d.cloud}/?shop=${encodeURIComponent(shop)}`;
+  const show = (cls, title, text, buttons = '') => {
+    box.className = cls;
+    box.innerHTML = `<div class="eyebrow">Point of sale</div><h1><span class="dot"></span>${title}</h1>${text}${buttons}`;
+  };
+  const shopBtn = (label, red) => `<a class="btn ${red ? 'red' : 'ghost'}" href="/">${label}</a>`;
+
+  function draw(d) {
+    lastData = d;
+    if (d.mode !== 'standby') { location.replace('/'); return; }
+    if (!d.configured) return show('off', 'Cloud not set up', '<p>This PC has no cloud address. Add CLOUD_URL and SYNC_TOKEN to its .env file and restart it.</p>', shopBtn('Open the shop PC POS'));
+    if (!d.ready) {
+      if (d.online === false) return show('off', 'No internet, and no copy yet', '<p>The shop PC needs the internet once to download the restaurant from the cloud. Connect it, then try again.</p>');
+      return show('busy', 'Getting the shop PC ready', `<p>Downloading the restaurant from the cloud. This takes a minute the first time.</p><p class="muted">${esc(d.downloading || '')}</p>`);
+    }
+    if (d.online === false) {
+      return show('off', 'No internet', `<p>Carry on with the POS on the shop PC. Everything you do uploads to the cloud when the internet is back.</p>
+        <p class="muted">Last copy from the cloud: ${ago(d.last_pull_at)}</p>`, shopBtn('Continue on the shop PC', true));
+    }
+    if (d.online === null) return show('busy', 'Checking the internet…', '<p class="muted">One moment.</p>');
+    if (d.problem) {
+      return show('off', 'Upload problem', `<p>The internet works, but the shop PC can't upload its offline work yet.</p><div class="problem">${esc(d.problem)}</div>`,
+        shopBtn('Continue on the shop PC', true) + `<a class="btn ghost" href="${esc(toCloud(d))}">Open the cloud POS anyway</a>`);
+    }
+    if (d.pending > 0 || !d.current) {
+      return show('busy', 'Internet is back', `<p>${d.pending > 0 ? `Uploading ${d.pending} offline change${d.pending === 1 ? '' : 's'} to the cloud…` : 'Catching up with the cloud…'}</p>
+        <p class="muted">The cloud POS opens by itself when this is finished.</p>`, shopBtn('Stay on the shop PC'));
+    }
+    if (stay) return show('ok', 'Internet works', '<p>Everything is up to date.</p>', `<a class="btn" href="${esc(toCloud(d))}">Open the cloud POS</a>` + shopBtn('Use the shop PC'));
+    show('ok', 'Opening the cloud POS…', '<p>Internet works and everything is up to date.</p>',
+      `<a class="btn" href="${esc(toCloud(d))}">Open the cloud POS</a><button type="button" class="btn ghost" id="stay">Stay on the shop PC</button>`);
+    document.getElementById('stay').onclick = () => { stay = true; draw(lastData); };
+    if (!leaving) { leaving = true; setTimeout(() => { if (!stay) location.href = toCloud(d); else leaving = false; }, 1500); }
+  }
+
+  async function tick() {
+    try { const r = await fetch('/start/status', { cache: 'no-store' }); draw(await r.json()); } catch { show('off', 'Shop PC not answering', '<p>Check that the shop PC is on and the POS is running.</p>'); }
+    setTimeout(tick, 1500);
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

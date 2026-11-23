@@ -1,0 +1,55 @@
+# Shop server: the POS runs here on the shop network, so orders, kitchen tickets, printing and
+# payments keep working when the internet is down. It syncs to the cloud copy whenever it can.
+#   1. copy .env.shop.example to .env and fill it in
+#   2. docker compose up -d
+#   3. open http://<this-PC's-IP>:3000 on the tablets
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_DB: pos
+    volumes:
+      - pos-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://pos:${DB_PASSWORD:-change-me}@db:5432/pos
+      POS_MODE: ${POS_MODE:-local}   # local = shop PC is the main POS; standby = cloud is the main POS (CLOUD-FIRST.md)
+      CLOUD_URL: ${CLOUD_URL:-}
+      SYNC_TOKEN: ${SYNC_TOKEN:-}
+      PRINT_DIRECT: "true"
+      TZ_DISPLAY: Asia/Colombo
+
+  # Nightly backup on the shop PC as well (keeps 14 days in ./backups)
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c 'while true; do
+        pg_dump -h db -U pos -d pos -Fc -f /backups/pos-$$(date +%F).dump &&
+        find /backups -name "pos-*.dump" -mtime +14 -delete;
+        sleep 86400; done'
+
+volumes:
+  pos-db:
