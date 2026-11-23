@@ -204,7 +204,7 @@ app.get('/api/config', wrap(async (req, res) => {
   const lic = await license.current();
   res.json({ ...pub, license: { ...lic, id: undefined }, vendorWhatsapp: VENDOR_WHATSAPP,
     demo: demo ? { ...demo.info, trialUrl: process.env.DEMO_TRIAL_URL || 'https://virunthu.shop/#trial' } : undefined, mode: MODE, printDirect: PRINT_DIRECT, billText: billtext.TEXT, cloudUrl: MODE === 'standby' ? CLOUD_URL : undefined,
-    loginBg: ver.login_bg ? `/login-bg?v=${ver.login_bg}` : '/img/login-bg.jpg', logo: ver.logo ? `/logo?v=${ver.logo}` : null });
+    loginBg: DEMO ? '/img/demo-login-bg.jpg' : ver.login_bg ? `/login-bg?v=${ver.login_bg}` : '/img/login-bg.jpg', logo: ver.logo ? `/logo?v=${ver.logo}` : null });
 }));
 
 // Restaurant logo (public: shown on the login screen and printed bills)

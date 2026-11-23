@@ -19,7 +19,7 @@ const PINS = [['0000', 'Manager', 'everything, incl. Admin and Reports'], ['1234
 // What visitors can't change in the demo: [method regex, path regex, message]
 const BLOCKED = [
   [/^(POST|PATCH|PUT|DELETE)$/, /^\/api\/admin\/staff/, 'Staff and PINs are fixed in the demo, so everyone can sign in.'],
-  [/^(POST|PATCH|PUT|DELETE)$/, /^\/api\/admin\/(license|devices)/, 'The licence and devices are fixed in the demo.'],
+  [/^(GET|POST|PATCH|PUT|DELETE)$/, /^\/api\/admin\/(license|devices)/, 'The licence and devices are fixed in the demo.'],
   [/^(POST|PATCH|PUT|DELETE)$/, /^\/api\/admin\/integrations/, 'Email reports are switched off in the demo.'],
   [/^(POST|PATCH|PUT|DELETE)$/, /^\/api\/admin\/printing/, 'Printers are fixed in the demo. Bills print through your browser.'],
   [/^(PUT|DELETE)$/, /^\/api\/admin\/(logo|login-bg|items\/\d+\/image)/, 'Uploading pictures is switched off in the demo.'],

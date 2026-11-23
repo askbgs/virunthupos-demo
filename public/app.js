@@ -974,7 +974,7 @@
     if (!S.admin.data) return '<section class="hist"><div class="empty">Loading…</div></section>';
     return `<section class="admin">
       <aside class="cats scroll"><div class="label">ADMIN</div>
-        ${ADMIN_SECTIONS.map(([id, label]) => `<button type="button" class="cat ${S.admin.section === id ? 'on' : ''}" data-act="admin-section" data-id="${id}">${esc(label)}${SECTION_FEATURE[id] ? lockTag(SECTION_FEATURE[id]) : ''}</button>`).join('')}
+        ${ADMIN_SECTIONS.filter(([id]) => !(S.cfg.demo && id === 'plan')).map(([id, label]) => `<button type="button" class="cat ${S.admin.section === id ? 'on' : ''}" data-act="admin-section" data-id="${id}">${esc(label)}${SECTION_FEATURE[id] ? lockTag(SECTION_FEATURE[id]) : ''}</button>`).join('')}
       </aside>
       <div class="scroll" id="admin-list">${adminList()}</div>
       <aside class="hdetail scroll admin-form">${S.admin.sel?.kind === 'printer' ? printerForm()
