@@ -88,7 +88,7 @@ module.exports = function adminRouter({ pool, tx, hashPin, checkPin, notify, wra
       settings: { restaurant: CONFIG.restaurant, terminal: CONFIG.terminal, currency: CONFIG.currency, taxLabel: CONFIG.taxLabel,
         taxRate: CONFIG.taxRate, serviceRate: CONFIG.serviceRate, lateMinutes: CONFIG.lateMinutes,
         address: CONFIG.address, phone: CONFIG.phone, email: CONFIG.email, website: CONFIG.website, regNo: CONFIG.regNo, billFooter: CONFIG.billFooter,
-        billLang: CONFIG.billLang, restaurantTa: CONFIG.restaurantTa, addressTa: CONFIG.addressTa, billFooterTa: CONFIG.billFooterTa,
+        defaultCategory: CONFIG.defaultCategory, billLang: CONFIG.billLang, restaurantTa: CONFIG.restaurantTa, addressTa: CONFIG.addressTa, billFooterTa: CONFIG.billFooterTa,
         restaurantSi: CONFIG.restaurantSi, addressSi: CONFIG.addressSi, billFooterSi: CONFIG.billFooterSi } });
   }));
 
@@ -110,6 +110,7 @@ module.exports = function adminRouter({ pool, tx, hashPin, checkPin, notify, wra
       address: String(b.address ?? '').replace(/\r/g, '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3).join('\n').slice(0, 160),
       phone: str(b.phone, 60), email: str(b.email, 80), website: str(b.website, 80), regNo: str(b.regNo, 60),
       billFooter: str(b.billFooter, 120),
+      defaultCategory: /^\d{1,9}$/.test(String(b.defaultCategory ?? '')) ? String(b.defaultCategory) : '',
       billLang: ['en', 'ta', 'si'].includes(b.billLang) ? b.billLang : 'en',
       restaurantTa: str(b.restaurantTa, 60), addressTa: addr(b.addressTa), billFooterTa: str(b.billFooterTa, 120),
       restaurantSi: str(b.restaurantSi, 60), addressSi: addr(b.addressSi), billFooterSi: str(b.billFooterSi, 120),

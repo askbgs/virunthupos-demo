@@ -21,6 +21,8 @@ const CONFIG = {
   // business details printed on bills (set in Admin → Settings)
   address: '', phone: '', email: '', website: '', regNo: '', billFooter: 'Thank you! Come again.',
   // bill language (en | ta | si) and the restaurant's own wording in Tamil and Sinhala (optional)
+  // menu category the order screen opens on ('' = 'Sri Lankan' if there is one, else the first)
+  defaultCategory: '',
   billLang: 'en', restaurantTa: '', addressTa: '', billFooterTa: '', restaurantSi: '', addressSi: '', billFooterSi: '',
   logoRaster: null, // 1-bit logo for thermal printers: { w, h, data (base64, packed rows) }
 };

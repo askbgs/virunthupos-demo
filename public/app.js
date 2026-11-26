@@ -328,6 +328,7 @@
       if (pin.length < 4) return renderLogin('PIN is at least 4 digits');
       try {
         S.user = await api('/login', { body: { pin, device: deviceId(), deviceName: deviceName() } });
+        S.booted = false; // start on this person's home screen
         pin = '';
         return boot();
       } catch (e) { pin = ''; return renderLogin(e.message); }
@@ -460,10 +461,10 @@
   }
 
   function orderView() {
-    if (!S.order) return startView();
-    const o = S.order;
+    if (!S.order && !S.draft) return startView();
+    const o = S.order || { type: 'counter', draft: true, items: [], kots: [], subtotal_cents: 0, discount_cents: 0, tax_cents: 0, opened_at: new Date().toISOString(), staff_name: S.user?.name };
     const cats = S.menu.categories;
-    if (!S.cat) S.cat = cats[0]?.id;
+    if (!S.cat || !cats.some((c) => c.id === S.cat)) S.cat = defaultCat();
     const pending = o.items.filter(isPending);
     const byCourse = COURSES.map((c) => [c, o.items.filter((i) => i.course === c)]).filter(([, l]) => l.length);
     const ticketTotal = o.subtotal_cents - o.discount_cents + o.tax_cents;
@@ -478,11 +479,11 @@
         </div>
         <aside class="ticket">
           <div class="ticket-head">
-            <div><div class="eyebrow">${TYPE_LABEL[o.type]}</div><h2>${esc(orderTitle(o))}</h2>
-              <div class="muted" style="font-size:14px">Opened ${clock(o.opened_at)} · ${mins(o.opened_at)} min · ${esc(o.staff_name || '')}</div>
+            <div><div class="eyebrow">${TYPE_LABEL[o.type]}</div><h2>${o.draft ? 'New counter sale' : esc(orderTitle(o))}</h2>
+              <div class="muted" style="font-size:14px">${o.draft ? `Tap a dish to start · ${esc(o.staff_name || '')}` : `Opened ${clock(o.opened_at)} · ${mins(o.opened_at)} min · ${esc(o.staff_name || '')}`}</div>
               ${o.type !== 'dinein' && o.customer_name ? `<div style="font-size:14px;margin-top:4px">${esc(o.customer_name)}${o.phone ? ' · ' + esc(o.phone) : ''}</div>` : ''}
               ${o.address ? `<div class="muted" style="font-size:13px">${esc(o.address)}</div>` : ''}
-              <button type="button" class="link-red" style="margin-top:8px" data-act="void">${o.kots.length || o.items.some((i) => i.served_direct) ? 'Void order' : 'Cancel order'}</button>
+              ${o.draft ? `<button type="button" class="link-red" style="margin-top:8px" data-act="new-order-other">Other order type</button>` : `<button type="button" class="link-red" style="margin-top:8px" data-act="void">`}${o.draft ? '' : `${o.kots.length || o.items.some((i) => i.served_direct) ? 'Void order' : 'Cancel order'}</button>`}
             </div>
             ${o.type === 'dinein' ? `<div><div class="muted" style="font-size:12px;margin-bottom:4px">Guests</div>
               <div class="stepper"><button type="button" data-act="guests" data-d="-1">−</button><span>${o.guests}</span><button type="button" data-act="guests" data-d="1">+</button></div></div>` : ''}
@@ -885,6 +886,7 @@
           <div class="two">${field('Website', inp('website', st.website, 'maxlength="80" placeholder="www.example.lk"'))}
             ${field('VAT / business reg. no.', inp('regNo', st.regNo, 'maxlength="60"'), 'Printed as "Reg. No".')}</div>
           ${field('Bill footer message', inp('billFooter', st.billFooter, 'maxlength="120" placeholder="Thank you! Come again."'))}
+          ${field('Menu opens on', `<select name="defaultCategory"><option value="">${esc(`Automatic (${(S.menu.categories.find((c) => /sri\s*lankan/i.test(c.name)) || S.menu.categories[0] || {}).name || 'first category'})`)}</option>${(S.admin.data?.categories || []).map((c) => `<option value="${c.id}" ${String(st.defaultCategory || '') === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`, 'The menu category the order screen shows first. Cashiers go straight to it when they sign in.')}
           <h3 style="margin:22px 0 6px">Bills in Tamil &amp; Sinhala</h3>
           <div class="muted" style="margin-bottom:12px">Staff can print each bill in English, Tamil or Sinhala from the Bill screen. Dish names come from each dish's Tamil and Sinhala names (Admin → Menu items). Leave a field empty to use the English wording.</div>
           ${field('Default bill language', `<select name="billLang">${[['en', 'English'], ['ta', 'தமிழ் (Tamil)'], ['si', 'සිංහල (Sinhala)']].map(([v, t]) => `<option value="${v}" ${(st.billLang || 'en') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`)}
@@ -1909,6 +1911,28 @@
   }
 
   // Orders can only start while a shift is open
+  // The menu category the order screen opens on: Admin → Settings, else "Sri Lankan", else the first
+  function defaultCat() {
+    const cats = S.menu?.categories || [];
+    const set = cats.find((c) => String(c.id) === String(S.cfg.defaultCategory || ''));
+    return (set || cats.find((c) => /sri\s*lankan/i.test(c.name)) || cats[0])?.id;
+  }
+  // Cashiers start on the menu with a new counter sale; everyone else on the floor plan
+  const isCashier = () => S.user?.role === 'Cashier';
+  function goHome() {
+    S.order = null; S.search = ''; S.cat = defaultCat();
+    if (isCashier()) { S.tab = 'order'; S.draft = true; } else { S.tab = 'floor'; S.draft = false; }
+  }
+  // A counter sale that only exists once the first dish is added (so no empty orders are left open)
+  async function ensureOrder() {
+    if (S.order) return true;
+    if (!S.draft || needShift()) return false;
+    S.order = await api('/orders', { body: { type: 'counter' } });
+    S.draft = false; S.payMethod = 'card'; S.payCard = { brand: '', last4: '', auth: '' }; S.cashIn = '';
+    loadFloor().catch(() => {});
+    return true;
+  }
+
   function needShift() {
     if (S.shift?.shift) return false;
     S.modal = { kind: 'confirm', title: 'Open a shift first',
@@ -1922,7 +1946,7 @@
 
   async function createOrder(body) {
     const o = await api('/orders', { body });
-    S.order = o; S.tab = 'order'; S.search = ''; S.modal = null;
+    S.order = o; S.tab = 'order'; S.search = ''; S.modal = null; S.draft = false; S.cat = defaultCat();
     S.payMethod = 'card'; S.payCard = { brand: '', last4: '', auth: '' }; S.cashIn = '';
     await loadFloor();
     render();
@@ -1966,9 +1990,11 @@
     },
     'customer-go': () => createOrder({ type: S.modal.type, customer_name: $('#c-name').value.trim(), phone: $('#c-phone').value.trim(), address: $('#c-addr')?.value.trim() }),
     'open-order': (d) => openOrder(d.id),
+    'new-order-other': () => { S.draft = false; S.order = null; S.tab = 'order'; render(); },
     cat: (d) => { S.cat = +d.id; S.search = ''; render(); },
     'quick-add': async (d) => {
       const item = S.menu.categories.flatMap((c) => c.items).find((i) => String(i.id) === d.id);
+      if (!(await ensureOrder())) return;
       S.order = await api(`/orders/${S.order.id}/items`, { body: { menu_item_id: item.id, qty: 1 } });
       render();
     },
@@ -1991,6 +2017,7 @@
     'opt-add': async () => {
       keepNote();
       const m = S.modal;
+      if (!(await ensureOrder())) return;
       S.order = await api(`/orders/${S.order.id}/items`, { body: { menu_item_id: m.item.id, qty: m.qty, spice: m.spice, addons: [...m.addons].map(([id, qty]) => ({ id, qty })), course: m.course, note: m.note.trim(), no_kot: !m.sendKot } });
       S.modal = null; render();
     },
@@ -2008,11 +2035,11 @@
           body: `<p class="muted" style="margin-top:0">Everything on this order is cancelled and the kitchen gets a VOID slip for tickets still cooking. ${money(o.total_cents)} will not be charged.</p>`,
           onSubmit: async (v) => {
             await api(`/orders/${o.id}/void`, { body: v });
-            toast(`${orderTitle(o)} voided`); S.order = null; S.modal = null; S.tab = 'floor'; await loadFloor(); render();
+            toast(`${orderTitle(o)} voided`); S.modal = null; goHome(); await loadFloor(); render();
           } });
       }
       S.modal = { kind: 'confirm', title: `Cancel ${orderTitle(S.order)}?`, text: 'Nothing has been sent to the kitchen. The order will be voided.', yes: 'Cancel order',
-      run: async () => { await api(`/orders/${S.order.id}/void`, { body: {} }); S.order = null; S.modal = null; S.tab = 'floor'; await loadFloor(); render(); } }; renderModal(); },
+      run: async () => { await api(`/orders/${S.order.id}/void`, { body: {} }); S.modal = null; goHome(); await loadFloor(); render(); } }; renderModal(); },
     'review-kot': () => { S.modal = { kind: 'kot', mode: 'station', hold: false }; renderModal(); },
     'kot-mode': (d) => { S.modal.mode = d.v; renderModal(); },
     'kot-hold': () => { S.modal.hold = !S.modal.hold; renderModal(); },
@@ -2062,7 +2089,7 @@
         const paid = await api(`/orders/${o.id}/pay`, { body: { payment_method: S.payMethod, ...card, ...cash } });
         toast(`Paid ${money(paid.total_cents)} · ${orderTitle(paid)}${paid.change_cents ? ` · give change ${money(paid.change_cents)}` : ''}`);
         S.cashIn = '';
-        S.order = null; S.modal = null; S.tab = 'floor'; await loadFloor(); render();
+        S.modal = null; goHome(); await loadFloor(); render();
       };
       S.modal = { kind: 'confirm', title: `Charge ${money(o.total_cents)} by ${S.payMethod === 'card' ? `${S.payCard.brand} •••• ${S.payCard.last4}` : S.payMethod}?${cash.cash_received_cents != null ? ` Received ${money(cash.cash_received_cents)}, change ${money(cash.cash_received_cents - o.total_cents)}.` : ''}`,
         text: pending ? `${pending} item${pending > 1 ? 's have' : ' has'} not been sent yet. ${pending > 1 ? 'They' : 'It'} will be sent to the kitchen now and included in this bill.` : `This closes ${orderTitle(o)}${o.type === 'dinein' ? ' and frees the table' : ''}.`,
@@ -2500,6 +2527,7 @@
     [S.menu] = await Promise.all([api('/menu'), loadFloor()]);
     if (!S.es) { S.es = true; connectEvents(); }
     if (S.cfg.mode === 'mirror' && S.tab === 'floor') { S.tab = isManager() ? 'reports' : 'history'; await setTab(S.tab); return; }
+    if (!S.booted) { S.booted = true; if (S.cfg.mode !== 'mirror') goHome(); }
     render();
   }
   run(boot)();
